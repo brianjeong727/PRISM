@@ -3,69 +3,64 @@
 :root {
   --font-size: 16px;
 
-  /* Dark-first base — this app is always dark */
-  --background: #0c111b;
-  --foreground: #f1f5f9;
-  --card: #111827;
-  --card-foreground: #f1f5f9;
-  --popover: #1a2236;
-  --popover-foreground: #f1f5f9;
-  --primary: #3b82f6;
+  /* Light-first — white & red emergency palette */
+  --background: #ffffff;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+  --primary: #dc2626;
   --primary-foreground: #ffffff;
-  --secondary: #1e293b;
-  --secondary-foreground: #94a3b8;
-  --muted: #1a2236;
+  --secondary: #f8fafc;
+  --secondary-foreground: #0f172a;
+  --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  --accent: #1e293b;
-  --accent-foreground: #f1f5f9;
-  --destructive: #ef4444;
+  --accent: #fef2f2;
+  --accent-foreground: #dc2626;
+  --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
-  --border: rgba(255,255,255,0.07);
-  --input: #1a2236;
-  --input-background: #1a2236;
-  --switch-background: #334155;
+  --border: #e2e8f0;
+  --input: #f8fafc;
+  --input-background: #f8fafc;
+  --switch-background: #cbd5e1;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #3b82f6;
+  --ring: #dc2626;
   --radius: 0.5rem;
 
   /* Charts */
-  --chart-1: #3b82f6;
+  --chart-1: #dc2626;
   --chart-2: #10b981;
   --chart-3: #f59e0b;
   --chart-4: #8b5cf6;
-  --chart-5: #ef4444;
+  --chart-5: #0ea5e9;
 
   /* Sidebar */
-  --sidebar: #0c111b;
-  --sidebar-foreground: #f1f5f9;
-  --sidebar-primary: #3b82f6;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #0f172a;
+  --sidebar-primary: #dc2626;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1e293b;
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: rgba(255,255,255,0.06);
-  --sidebar-ring: #3b82f6;
+  --sidebar-accent: #fef2f2;
+  --sidebar-accent-foreground: #dc2626;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #dc2626;
 
-  /* ICS Operational Status Colors */
-  --status-available: #10b981;
-  --status-enroute: #f59e0b;
-  --status-on-scene: #f97316;
-  --status-transporting: #3b82f6;
-  --status-critical: #ef4444;
+  /* Operational status colors — always meaningful */
+  --status-available: #16a34a;
+  --status-enroute: #d97706;
+  --status-on-scene: #ea580c;
+  --status-transporting: #2563eb;
+  --status-critical: #dc2626;
 
-  /* Legacy ICS request status colors */
-  --status-submitted: #3b82f6;
-  --status-under-review: #8b5cf6;
-  --status-counteroffered: #f59e0b;
-  --status-approved: #10b981;
-  --status-in-fulfillment: #06b6d4;
-  --status-fulfilled: #059669;
-  --status-closed: #475569;
-  --status-rejected: #ef4444;
+  --status-submitted: #2563eb;
+  --status-approved: #16a34a;
+  --status-closed: #94a3b8;
+  --status-rejected: #dc2626;
 
-  --variance-ok: #10b981;
-  --variance-warning: #f59e0b;
-  --variance-critical: #ef4444;
+  --variance-ok: #16a34a;
+  --variance-warning: #d97706;
+  --variance-critical: #dc2626;
 
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -145,20 +140,21 @@
   input { font-size: var(--text-sm); font-weight: 400; line-height: 1.5; }
 }
 
-/* Operational field inputs — used inline in screens */
+/* Field inputs */
 .field-input {
   background: var(--input-background);
-  border: 1px solid rgba(255,255,255,0.09);
+  border: 1px solid var(--border);
   border-radius: var(--radius-input);
   color: var(--foreground);
   padding: 8px 12px;
   width: 100%;
   font-size: 0.875rem;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 .field-input:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.08);
 }
 .field-input::placeholder {
   color: var(--muted-foreground);
@@ -172,15 +168,15 @@
   border-radius: 50%;
   flex-shrink: 0;
 }
-.status-dot.available { background: var(--status-available); }
-.status-dot.enroute   { background: var(--status-enroute); }
-.status-dot.on-scene  { background: var(--status-on-scene); }
+.status-dot.available    { background: var(--status-available); }
+.status-dot.enroute      { background: var(--status-enroute); }
+.status-dot.on-scene     { background: var(--status-on-scene); }
 .status-dot.transporting { background: var(--status-transporting); }
 
 /* Live pulse animation */
 @keyframes pulse-live {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  50% { opacity: 0.35; }
 }
 .live-pulse {
   animation: pulse-live 2s ease-in-out infinite;

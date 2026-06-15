@@ -38,11 +38,11 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#0c111b]">
+    <div className="h-screen flex flex-col bg-white">
       <TopNav />
       <div className="flex-1 flex overflow-hidden">
         <SideNav currentPath={currentPath} onNavigate={setCurrentPath} />
-        <main className="flex-1 overflow-y-auto bg-[#0c111b]">
+        <main className="flex-1 overflow-y-auto bg-[#f8fafc]">
           {user.role === 'IC' && currentPath === '/dashboard' && <ICDashboard />}
           {user.role === 'IC' && currentPath === '/hospitals' && <HospitalScreen />}
           {user.role === 'IC' && currentPath === '/inventory' && <InventoryScreen />}

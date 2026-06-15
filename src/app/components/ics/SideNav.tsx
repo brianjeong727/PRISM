@@ -43,7 +43,7 @@ export const SideNav: React.FC<SideNavProps> = ({ currentPath, onNavigate }) => 
   const navItems = navItemsByRole[user.role];
 
   return (
-    <div className="w-52 border-r border-white/[0.06] bg-[#0c111b] h-full flex flex-col shrink-0">
+    <div className="w-52 border-r border-slate-200 bg-white h-full flex flex-col shrink-0">
       <nav className="p-3 space-y-0.5 flex-1 pt-4">
         {navItems.map((item) => {
           const isActive = currentPath === item.path;
@@ -54,22 +54,22 @@ export const SideNav: React.FC<SideNavProps> = ({ currentPath, onNavigate }) => 
               className={cn(
                 'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all relative',
                 isActive
-                  ? 'bg-white/[0.07] text-white font-medium'
-                  : 'text-slate-500 hover:text-slate-300 hover:bg-white/[0.04]'
+                  ? 'bg-red-50 text-red-700 font-medium'
+                  : 'text-slate-500 hover:text-slate-800 hover:bg-slate-50'
               )}
             >
               {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-blue-500" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-red-500" />
               )}
-              <span className={isActive ? 'text-blue-400' : ''}>{item.icon}</span>
+              <span className={isActive ? 'text-red-600' : ''}>{item.icon}</span>
               <span>{item.label}</span>
             </button>
           );
         })}
       </nav>
 
-      <div className="p-3 border-t border-white/[0.06]">
-        <p className="text-xs text-white/20 text-center tracking-widest uppercase">
+      <div className="p-3 border-t border-slate-100">
+        <p className="text-xs text-slate-300 text-center tracking-widest uppercase">
           {user.role === 'IC' ? 'Command' : 'Field'}
         </p>
       </div>
