@@ -13,7 +13,8 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `Request failed: ${res.status}`);
+    const isHtml = text.trim().startsWith('<');
+    throw new Error(isHtml ? `Server error (${res.status}) — check API configuration` : (text || `Request failed: ${res.status}`));
   }
   return res.json();
 }

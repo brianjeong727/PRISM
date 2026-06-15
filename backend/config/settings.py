@@ -44,7 +44,10 @@ SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-change-me-in-production")
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS_ENV = os.getenv("ALLOWED_HOSTS", "*")
-ALLOWED_HOSTS = [h.strip() for h in ALLOWED_HOSTS_ENV.split(",") if h.strip()]
+_parsed_hosts = [h.strip() for h in ALLOWED_HOSTS_ENV.split(",") if h.strip()]
+# Fall back to ["*"] if the env var is empty or unset — Vercel forwards the
+# correct Host header via X-Forwarded-Host, so wildcard is safe here.
+ALLOWED_HOSTS = _parsed_hosts if _parsed_hosts else ["*"]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
