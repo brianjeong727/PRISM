@@ -38,19 +38,17 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-screen flex flex-col bg-[#0c111b]">
       <TopNav />
       <div className="flex-1 flex overflow-hidden">
         <SideNav currentPath={currentPath} onNavigate={setCurrentPath} />
-        <main className="flex-1 overflow-y-auto">
-          {/* IC Routes */}
+        <main className="flex-1 overflow-y-auto bg-[#0c111b]">
           {user.role === 'IC' && currentPath === '/dashboard' && <ICDashboard />}
           {user.role === 'IC' && currentPath === '/hospitals' && <HospitalScreen />}
           {user.role === 'IC' && currentPath === '/inventory' && <InventoryScreen />}
           {user.role === 'IC' && currentPath === '/planning' && <PlanningScreen />}
           {user.role === 'IC' && currentPath === '/event-log' && <EventLogScreen />}
 
-          {/* EMS/Fire Routes */}
           {user.role === 'EMSFire' && currentPath === '/field' && <FieldHomeScreen />}
           {user.role === 'EMSFire' && currentPath === '/event-log' && <EventLogScreen />}
         </main>

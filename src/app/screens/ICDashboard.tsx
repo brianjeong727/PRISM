@@ -1,13 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useData, Request } from '@/app/contexts/DataContext';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { DataTable, Column } from '@/app/components/ics/DataTable';
-import { StatusPill } from '@/app/components/ics/StatusPill';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Badge } from '@/app/components/ui/badge';
-import { Button } from '@/app/components/ui/button';
-
-import {  Bell, AlertTriangle, RotateCcw} from 'lucide-react';
+import { AlertTriangle, RotateCcw, Ambulance, Flame, X, ChevronRight, Loader2 } from 'lucide-react';
 import { RequestDetailDrawer } from './RequestDetailDrawer';
 
 const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000/api').replace(/\/$/, '');
@@ -17,7 +11,6 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
     ...options,
   });
-
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `Request failed: ${res.status}`);
@@ -26,106 +19,54 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 const PREDICTION_SUBCATEGORIES: Record<string, string[]> = {
-  Fire: [
-    'Structure Fire',
-    'Brush Fire',
-    'Warehouse Fire',
-    'Industrial Fire',
-    'High-Rise Fire',
-    'Hazmat Fire',
-    'Vehicle Fire',
-    'Wildland Fire',
-  ],
+  Fire: ['Structure Fire', 'Brush Fire', 'Warehouse Fire', 'Industrial Fire', 'High-Rise Fire', 'Hazmat Fire', 'Vehicle Fire', 'Wildland Fire'],
   'Public Health': ['Disease Outbreak', 'Heat Illness Surge', 'Hospital Surge', 'Mass Casualty'],
-  Weather: [
-    'Ice Storm',
-    'Heatwave',
-    'Severe Thunderstorm',
-    'Tropical Storm',
-    'Tornado',
-    'Flash Flood',
-    'Blizzard',
-    'River Flood',
-    'Extreme Cold',
-    'Hurricane',
-  ],
+  Weather: ['Ice Storm', 'Heatwave', 'Severe Thunderstorm', 'Tropical Storm', 'Tornado', 'Flash Flood', 'Blizzard', 'River Flood', 'Extreme Cold', 'Hurricane'],
   Infrastructure: ['Water Main Break', 'Bridge Collapse', 'Cyber Outage', 'Damaged Gas Line', 'Power Outage'],
 };
 
-// --------------------
-// DB types (Django)
-// --------------------
 type UnitTypeCode = 'AMB' | 'ENG';
 type UnitStatusCode = 'AVAILABLE' | 'ENROUTE' | 'ON_SCENE' | 'TRANSPORTING';
 
 type ApiUnit = {
-  id: number;              // Django PK
-  name: string;            // "Ambulance 3"
-  unit_type: UnitTypeCode; // "AMB"
-  status: UnitStatusCode;  // "AVAILABLE"
+  id: number;
+  name: string;
+  unit_type: UnitTypeCode;
+  status: UnitStatusCode;
 };
 
-type UiUnitStatus = 'Transporting' | 'In Transit' | 'On Scene';
-type UiUnitType = 'Fire Engine' | 'Ambulance';
+function statusClass(s: UnitStatusCode) {
+  if (s === 'AVAILABLE') return 'available';
+  if (s === 'ENROUTE') return 'enroute';
+  if (s === 'ON_SCENE') return 'on-scene';
+  return 'transporting';
+}
 
-type UiUnitRow = {
-  id: string; // ENG-3 / AMB-2 style for the UI table
-  unitType: UiUnitType;
-  status: UiUnitStatus;
-  assignedTo?: string;
-  depleted?: boolean;
+function statusLabel(s: UnitStatusCode) {
+  if (s === 'AVAILABLE') return 'Available';
+  if (s === 'ENROUTE') return 'En Route';
+  if (s === 'ON_SCENE') return 'On Scene';
+  return 'Transporting';
+}
 
-  // keep original DB reference if you ever need it
-  _dbId: number;
-  _dbStatus: UnitStatusCode;
-  _dbType: UnitTypeCode;
-  _dbName: string;
-};
-
-function dbUnitToUiRow(u: ApiUnit): UiUnitRow {
-  const uiType: UiUnitType = u.unit_type === 'ENG' ? 'Fire Engine' : 'Ambulance';
-
-  const uiId =
-    u.unit_type === 'ENG'
-      ? `ENG-${u.id}`
-      : `AMB-${u.id}`;
-
-  const uiStatus: UiUnitStatus =
-    u.status === 'ON_SCENE'
-      ? 'On Scene'
-      : u.status === 'TRANSPORTING'
-        ? 'Transporting'
-        : 'In Transit'; // ENROUTE (and even AVAILABLE) should not show in this IC table
-
-  return {
-    id: uiId,
-    unitType: uiType,
-    status: uiStatus,
-    _dbId: u.id,
-    _dbStatus: u.status,
-    _dbType: u.unit_type,
-    _dbName: u.name,
-  };
+function statusColor(s: UnitStatusCode) {
+  if (s === 'AVAILABLE') return 'text-emerald-400';
+  if (s === 'ENROUTE') return 'text-amber-400';
+  if (s === 'ON_SCENE') return 'text-orange-400';
+  return 'text-blue-400';
 }
 
 export const ICDashboard: React.FC = () => {
-  const { requests, addRequest, logEvent } = useData();
+  const { addRequest, logEvent } = useData();
   const { user, incident } = useAuth();
   const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
 
-  // --------------------
-  // ✅ Units come from DB now (not hardcoded)
-  // --------------------
   const [dbUnits, setDbUnits] = useState<ApiUnit[]>([]);
   const [unitsLoading, setUnitsLoading] = useState(true);
   const [unitsErr, setUnitsErr] = useState<string | null>(null);
 
   const refreshUnits = useCallback(async (opts?: { silent?: boolean }) => {
-    const silent = opts?.silent ?? false;
-
-    // Only show loading spinner/disable on the first load (not on polling)
-    if (!silent) setUnitsLoading(true);
-
+    if (!opts?.silent) setUnitsLoading(true);
     try {
       const u = await api<ApiUnit[]>('/units/');
       setDbUnits(u);
@@ -133,31 +74,54 @@ export const ICDashboard: React.FC = () => {
     } catch (e: any) {
       setUnitsErr(e?.message ?? 'Failed to load units');
     } finally {
-      if (!silent) setUnitsLoading(false);
+      if (!opts?.silent) setUnitsLoading(false);
     }
   }, []);
 
-
   useEffect(() => {
-    // initial load (not silent)
     refreshUnits({ silent: false });
-
-    // polling (silent)
     const t = setInterval(() => refreshUnits({ silent: true }).catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [refreshUnits]);
-  
 
+  const deployedUnits = useMemo(
+    () => dbUnits.filter((u) => u.status === 'ENROUTE' || u.status === 'ON_SCENE' || u.status === 'TRANSPORTING'),
+    [dbUnits]
+  );
 
-  // Only show ENROUTE + ON_SCENE + TRANSPORTING in the IC table
-  const units: UiUnitRow[] = useMemo(() => {
-  const relevant = dbUnits.filter((u) => u.status === 'ENROUTE' || u.status === 'ON_SCENE');
-    return relevant.map(dbUnitToUiRow);
-  }, [dbUnits]);
+  const availableAmb = useMemo(() => dbUnits.filter((u) => u.unit_type === 'AMB' && u.status === 'AVAILABLE').length, [dbUnits]);
+  const availableEng = useMemo(() => dbUnits.filter((u) => u.unit_type === 'ENG' && u.status === 'AVAILABLE').length, [dbUnits]);
+  const totalAmb = useMemo(() => dbUnits.filter((u) => u.unit_type === 'AMB').length, [dbUnits]);
+  const totalEng = useMemo(() => dbUnits.filter((u) => u.unit_type === 'ENG').length, [dbUnits]);
 
-  // --------------------
-  // Prediction modal state & inputs
-  // --------------------
+  // Low dispatch alert
+  const [lowDispatch, setLowDispatch] = useState<{ low: boolean; warning: string } | null>(null);
+  const [lowDispatchLoading, setLowDispatchLoading] = useState(false);
+  const [lowDispatchError, setLowDispatchError] = useState<string | null>(null);
+
+  const fetchLowDispatchAlert = useCallback(async () => {
+    setLowDispatchLoading(true);
+    setLowDispatchError(null);
+    try {
+      const res = await fetch(`${API_BASE}/monitor/ambulances/low/`, { headers: { 'Content-Type': 'application/json' } });
+      if (!res.ok) throw new Error(`Low dispatch check failed (${res.status})`);
+      const data = await res.json();
+      setLowDispatch({ low: Boolean(data.low_ambulances), warning: String(data.warning ?? '') });
+    } catch (e) {
+      setLowDispatch(null);
+      setLowDispatchError(e instanceof Error ? e.message : 'Failed to load alert.');
+    } finally {
+      setLowDispatchLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLowDispatchAlert();
+    const id = window.setInterval(fetchLowDispatchAlert, 30000);
+    return () => window.clearInterval(id);
+  }, [fetchLowDispatchAlert]);
+
+  // Prediction modal
   const [showPredictionModal, setShowPredictionModal] = useState(false);
   const [predictionInput, setPredictionInput] = useState({
     location: '',
@@ -166,99 +130,21 @@ export const ICDashboard: React.FC = () => {
     disasterType: 'Fire',
     subCategory: PREDICTION_SUBCATEGORIES['Fire'][0],
   });
-
   const [predicted, setPredicted] = useState<{ engines: number; ambulances: number } | null>(null);
   const [predictionLoading, setPredictionLoading] = useState(false);
   const [predictionError, setPredictionError] = useState<string | null>(null);
 
-  // Submit request manual inputs
+  // Request form
   const [reqEngines, setReqEngines] = useState(0);
   const [reqAmbulances, setReqAmbulances] = useState(0);
-
-  // ✅ manual request fields
   const [reqLocation, setReqLocation] = useState('');
   const [reqPriority, setReqPriority] = useState<'Low' | 'Medium' | 'High'>('High');
-  // --------------------
-// Low Dispatch Alert
-// --------------------
-const [lowDispatch, setLowDispatch] = useState<{ low: boolean; warning: string } | null>(null);
-const [lowDispatchLoading, setLowDispatchLoading] = useState(false);
-const [lowDispatchError, setLowDispatchError] = useState<string | null>(null);
 
-const fetchLowDispatchAlert = useCallback(async () => {
-  setLowDispatchLoading(true);
-  setLowDispatchError(null);
-
-  try {
-    const res = await fetch(`${API_BASE}/monitor/ambulances/low/`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!res.ok) throw new Error(`Low dispatch check failed (${res.status})`);
-
-    const data = await res.json();
-    setLowDispatch({
-      low: Boolean(data.low_ambulances),
-      warning: String(data.warning ?? ''),
-    });
-  } catch (e) {
-    setLowDispatch(null);
-    setLowDispatchError(e instanceof Error ? e.message : 'Failed to load low dispatch alert.');
-  } finally {
-    setLowDispatchLoading(false);
-  }
-}, []);
-
-  
-  useEffect(() => {
-  fetchLowDispatchAlert();
-  const id = window.setInterval(fetchLowDispatchAlert, 30000); // every 30s
-  return () => window.clearInterval(id);
-  }, [fetchLowDispatchAlert]);
-
-  // Units table columns (reuse DataTable)
-  const unitColumns: Column[] = [
-    { key: 'id', label: 'Unit ID' },
-    { key: 'unitType', label: 'Type' },
-    { key: 'status', label: 'Status', render: (v: any) => <StatusPill status={v as any} /> },
-    { key: 'assignedTo', label: 'Assigned' },
-    {
-      key: 'actions',
-      label: 'Actions',
-      render: (_: any, row: UiUnitRow) => (
-        <div className="flex gap-2">
-          {row.status === 'In Transit' && (
-            <Button size="sm" onClick={() => handleMarkOnScene(row._dbId)}>
-              Mark On Scene
-            </Button>
-          )}
-          {row.status === 'On Scene' && (
-            <Button size="sm" variant="destructive" onClick={() => handleTransporting(row._dbId)}>
-              Transporting
-            </Button>
-          )}
-        </div>
-      ),
-    },
-  ];
-
-  // ✅ IC status updates now update DB
   const handleMarkOnScene = async (dbUnitId: number) => {
     try {
-      await api(`/units/${dbUnitId}/status/`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'ON_SCENE' }),
-      });
+      await api(`/units/${dbUnitId}/status/`, { method: 'PATCH', body: JSON.stringify({ status: 'ON_SCENE' }) });
       await refreshUnits();
-
-      logEvent({
-        actor: user?.name || 'IC',
-        action: 'Unit On Scene',
-        entityType: 'Unit',
-        entityId: String(dbUnitId),
-        payload: { to_status: 'ON_SCENE' },
-      });
+      logEvent({ actor: user?.name || 'IC', action: 'Unit On Scene', entityType: 'Unit', entityId: String(dbUnitId), payload: { to_status: 'ON_SCENE' } });
     } catch (e: any) {
       alert(e?.message ?? 'Failed to update unit status');
     }
@@ -266,19 +152,9 @@ const fetchLowDispatchAlert = useCallback(async () => {
 
   const handleTransporting = async (dbUnitId: number) => {
     try {
-      await api(`/units/${dbUnitId}/status/`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'TRANSPORTING' }),
-      });
+      await api(`/units/${dbUnitId}/status/`, { method: 'PATCH', body: JSON.stringify({ status: 'TRANSPORTING' }) });
       await refreshUnits();
-
-      logEvent({
-        actor: user?.name || 'IC',
-        action: 'Unit Transporting',
-        entityType: 'Unit',
-        entityId: String(dbUnitId),
-        payload: { to_status: 'TRANSPORTING' },
-      });
+      logEvent({ actor: user?.name || 'IC', action: 'Unit Transporting', entityType: 'Unit', entityId: String(dbUnitId), payload: { to_status: 'TRANSPORTING' } });
     } catch (e: any) {
       alert(e?.message ?? 'Failed to update unit status');
     }
@@ -299,24 +175,17 @@ const fetchLowDispatchAlert = useCallback(async () => {
         structures_damaged: predictionInput.buildings,
         start_time: new Date().toISOString(),
       };
-
       const response = await fetch(`${API_BASE}/api/initial-prediction/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incident: incidentPayload }),
       });
-
       if (!response.ok) throw new Error('Prediction request failed.');
-
       const data = await response.json();
       const engines = Math.max(0, Math.round(data.prediction?.firetrucks_dispatched_engines ?? 0));
       const ambulances = Math.max(0, Math.round(data.prediction?.ambulances_dispatched ?? 0));
       setPredicted({ engines, ambulances });
-
-      // carry predicted location into manual field if empty
-      if (!reqLocation.trim() && predictionInput.location.trim()) {
-        setReqLocation(predictionInput.location.trim());
-      }
+      if (!reqLocation.trim() && predictionInput.location.trim()) setReqLocation(predictionInput.location.trim());
     } catch (error) {
       setPredicted(null);
       setPredictionError(error instanceof Error ? error.message : 'Unable to run prediction.');
@@ -325,64 +194,27 @@ const fetchLowDispatchAlert = useCallback(async () => {
     }
   };
 
-  // ✅ Create real DB rows so EMS can see them
   const submitToDatabase = async (engines: number, ambulances: number) => {
-    const calls: Promise<any>[] = [];
-
     const location = reqLocation.trim() || predictionInput.location?.trim() || 'Unknown';
     const priority = reqPriority || 'Medium';
-
-    if (ambulances > 0) {
-      calls.push(
-        api('/requests/create/', {
-          method: 'POST',
-          body: JSON.stringify({
-            unit_type: 'AMB',
-            quantity: ambulances,
-            priority,
-            location,
-          }),
-        })
-      );
-    }
-
-    if (engines > 0) {
-      calls.push(
-        api('/requests/create/', {
-          method: 'POST',
-          body: JSON.stringify({
-            unit_type: 'ENG',
-            quantity: engines,
-            priority,
-            location,
-          }),
-        })
-      );
-    }
-
+    const calls: Promise<any>[] = [];
+    if (ambulances > 0) calls.push(api('/requests/create/', { method: 'POST', body: JSON.stringify({ unit_type: 'AMB', quantity: ambulances, priority, location }) }));
+    if (engines > 0) calls.push(api('/requests/create/', { method: 'POST', body: JSON.stringify({ unit_type: 'ENG', quantity: engines, priority, location }) }));
     if (calls.length === 0) return;
     await Promise.all(calls);
   };
 
   const handleSubmitRequest = async (fromPrediction = false) => {
     if (!incident || !user) return;
-
     const engines = fromPrediction && predicted ? predicted.engines : reqEngines;
     const ambulances = fromPrediction && predicted ? predicted.ambulances : reqAmbulances;
-
     const finalLocation = reqLocation.trim() || predictionInput.location?.trim() || 'Unknown';
     const finalPriority = reqPriority || 'Medium';
-
     try {
       await submitToDatabase(engines, ambulances);
-
-      // Optional: keep local DataContext for your UI/outliers demo
       const resources = [] as any[];
-      if (ambulances > 0)
-        resources.push({ id: `RL-A-${Date.now()}`, resourceType: 'Ambulances', qtyRequested: ambulances });
-      if (engines > 0)
-        resources.push({ id: `RL-E-${Date.now()}`, resourceType: 'Fire Engines', qtyRequested: engines });
-
+      if (ambulances > 0) resources.push({ id: `RL-A-${Date.now()}`, resourceType: 'Ambulances', qtyRequested: ambulances });
+      if (engines > 0) resources.push({ id: `RL-E-${Date.now()}`, resourceType: 'Fire Engines', qtyRequested: engines });
       addRequest({
         incidentId: incident.id,
         requesterId: user.id,
@@ -392,21 +224,11 @@ const fetchLowDispatchAlert = useCallback(async () => {
         status: 'Submitted',
         neededBy: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         location: finalLocation,
-        justification: fromPrediction
-          ? `Auto-generated: ${predictionInput.disasterType} / ${predictionInput.subCategory}`
-          : 'Manual request from IC',
+        justification: fromPrediction ? `Auto-generated: ${predictionInput.disasterType} / ${predictionInput.subCategory}` : 'Manual request from IC',
         patientImpact: String(predictionInput.patientCount || ''),
         resources,
       });
-
-      logEvent({
-        actor: user.name,
-        action: 'Submitted Request (DB)',
-        entityType: 'ResourceRequest',
-        entityId: 'created',
-        payload: { engines, ambulances, location: finalLocation, priority: finalPriority },
-      });
-
+      logEvent({ actor: user.name, action: 'Submitted Request (DB)', entityType: 'ResourceRequest', entityId: 'created', payload: { engines, ambulances, location: finalLocation, priority: finalPriority } });
       setShowPredictionModal(false);
       setPredicted(null);
       setReqAmbulances(0);
@@ -414,7 +236,6 @@ const fetchLowDispatchAlert = useCallback(async () => {
       setReqLocation('');
       setReqPriority('High');
     } catch (err) {
-      console.error(err);
       alert(err instanceof Error ? err.message : 'Failed to submit request');
     }
   };
@@ -423,318 +244,418 @@ const fetchLowDispatchAlert = useCallback(async () => {
     if (!predicted) return;
     setReqEngines(predicted.engines);
     setReqAmbulances(predicted.ambulances);
-
     if (predictionInput.location.trim()) setReqLocation(predictionInput.location.trim());
-
     setShowPredictionModal(false);
     setPredicted(null);
   };
 
- 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold mb-2">Operations Dashboard</h1>
-          <p className="text-muted-foreground">Monitor and triage resource requests across the incident</p>
-          {incident && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Incident: <span className="font-medium">{incident.name}</span>
-            </p>
-          )}
-          {unitsErr && <p className="text-sm text-red-600 mt-2">{unitsErr}</p>}
+    <div className="p-6 space-y-6 max-w-6xl">
+      {/* Low dispatch alert banner */}
+      {lowDispatch?.low && (
+        <div className="flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-red-300">Low Ambulance Availability</p>
+            <p className="text-sm text-red-400/80 mt-0.5 leading-relaxed">{lowDispatch.warning}</p>
+          </div>
+          <button
+            onClick={fetchLowDispatchAlert}
+            disabled={lowDispatchLoading}
+            className="shrink-0 text-red-400/60 hover:text-red-400 transition-colors"
+          >
+            <RotateCcw className={`h-4 w-4 ${lowDispatchLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
+      )}
+
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-semibold text-white">Operations Dashboard</h1>
+        <p className="text-sm text-slate-500 mt-0.5">
+          {incident?.name} · Resource status &amp; requests
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Units — Enroute & On Scene</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex gap-4 items-center">
-                  <Badge>{units.filter(u => u.status === 'In Transit').length} Enroute</Badge>
-                  <Badge>{units.filter(u => u.status === 'On Scene').length} On Scene</Badge>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={() => setShowPredictionModal(true)} disabled={false}>
-                    Initial Prediction
-                  </Button>
-
-                </div>
-              </div>
-
-              <DataTable columns={unitColumns} data={units as any[]} emptyMessage="No units enroute/on scene" />
-
-              <div className="p-4 border rounded-lg space-y-3">
-                <h3 className="font-medium">Submit Request</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-sm block mb-1">Location</label>
-                    <input
-                      value={reqLocation}
-                      onChange={e => setReqLocation(e.target.value)}
-                      className="w-full input input-sm"
-                      placeholder="e.g., UPMC Presby, 200 Lothrop St"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-sm block mb-1">Priority</label>
-                    <select
-                      value={reqPriority}
-                      onChange={e => setReqPriority(e.target.value as any)}
-                      className="w-full input input-sm"
-                    >
-                      <option value="Low">Low</option>
-                      <option value="Medium">Medium</option>
-                      <option value="High">High</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 items-center">
-                  <label className="text-sm">Ambulances</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={reqAmbulances}
-                    onChange={e => setReqAmbulances(Number(e.target.value))}
-                    className="input input-sm w-24"
-                  />
-
-                  <label className="text-sm">Fire Engines</label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={reqEngines}
-                    onChange={e => setReqEngines(Number(e.target.value))}
-                    className="input input-sm w-24"
-                  />
-
-                  <Button onClick={() => handleSubmitRequest(false)} disabled={reqAmbulances === 0 && reqEngines === 0}>
-                    Submit
-                  </Button>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Location/priority are written to the DB so EMS sees them.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          
-
-          <Card className={lowDispatch?.low ? "border-destructive/40" : ""}>
-  <CardHeader className="pb-3">
-    <CardTitle className="flex items-center justify-between">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className={lowDispatch?.low ? "h-5 w-5 text-destructive" : "h-5 w-5 text-muted-foreground"} />
-        <span className="tracking-tight">Low Dispatch Alert</span>
-
-        {lowDispatch && (
-          <Badge variant={lowDispatch.low ? "destructive" : "secondary"} className="ml-2">
-            {lowDispatch.low ? "Critical" : "Normal"}
-          </Badge>
-        )}
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard
+          icon={<Ambulance className="h-4 w-4" />}
+          label="Ambulances Available"
+          value={availableAmb}
+          total={totalAmb}
+          loading={unitsLoading}
+          critical={availableAmb <= 2}
+        />
+        <StatCard
+          icon={<Flame className="h-4 w-4" />}
+          label="Engines Available"
+          value={availableEng}
+          total={totalEng}
+          loading={unitsLoading}
+          critical={availableEng <= 1}
+        />
+        <StatCard
+          label="Units Deployed"
+          value={deployedUnits.length}
+          loading={unitsLoading}
+        />
+        <StatCard
+          label="Alert Status"
+          value={lowDispatch?.low ? 'LOW' : (lowDispatch ? 'OK' : '—')}
+          valueClass={lowDispatch?.low ? 'text-red-400' : 'text-emerald-400'}
+          loading={lowDispatchLoading && !lowDispatch}
+        />
       </div>
 
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={fetchLowDispatchAlert}
-        disabled={lowDispatchLoading}
-        className="gap-2"
-      >
-        <RotateCcw className="h-4 w-4" />
-        Refresh
-      </Button>
-    </CardTitle>
-  </CardHeader>
-
-  <CardContent className="space-y-3">
-    {lowDispatchLoading && (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="h-2 w-2 rounded-full bg-muted-foreground/60 animate-pulse" />
-        Checking ambulance availability…
-      </div>
-    )}
-
-    {lowDispatchError && (
-      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-        {lowDispatchError}
-      </div>
-    )}
-
-    {!lowDispatchLoading && !lowDispatchError && lowDispatch && (
-      <>
-        <div className="flex items-center justify-between rounded-lg border bg-background/60 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <div className={`h-2.5 w-2.5 rounded-full ${lowDispatch.low ? "bg-destructive" : "bg-muted-foreground"}`} />
-            <p className="text-sm font-medium">
-              Status:{" "}
-              <span className={lowDispatch.low ? "text-destructive" : "text-foreground"}>
-                {lowDispatch.low ? "LOW" : "OK"}
-              </span>
-            </p>
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* Deployed units */}
+        <div className="lg:col-span-3 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white uppercase tracking-widest">
+              Active Units
+            </h2>
+            {unitsErr && <span className="text-xs text-red-400">{unitsErr}</span>}
           </div>
 
-          <p className="text-xs text-muted-foreground">Auto-refresh: 30s</p>
+          <div className="rounded-xl border border-white/[0.06] bg-[#111827] overflow-hidden">
+            {deployedUnits.length === 0 ? (
+              <div className="p-8 text-center text-slate-600 text-sm">
+                {unitsLoading ? 'Loading units…' : 'No units currently deployed'}
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.04]">
+                {deployedUnits.map((u) => (
+                  <div key={u.id} className="flex items-center gap-4 px-4 py-3">
+                    <span className={`status-dot ${statusClass(u.status)}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white">{u.name}</p>
+                      <p className={`text-xs ${statusColor(u.status)}`}>{statusLabel(u.status)}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      {u.status === 'ENROUTE' && (
+                        <button
+                          onClick={() => handleMarkOnScene(u.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-slate-300 hover:text-white transition-colors"
+                        >
+                          Mark On Scene
+                        </button>
+                      )}
+                      {u.status === 'ON_SCENE' && (
+                        <button
+                          onClick={() => handleTransporting(u.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-blue-200 transition-colors"
+                        >
+                          Transporting
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Submit Request */}
+          <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">Request Resources</h3>
+              <button
+                onClick={() => setShowPredictionModal(true)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-white/[0.08] text-slate-400 hover:text-white hover:border-white/[0.18] transition-colors"
+              >
+                AI Prediction
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Location</label>
+                <input
+                  value={reqLocation}
+                  onChange={(e) => setReqLocation(e.target.value)}
+                  className="field-input"
+                  placeholder="e.g., UPMC Presby, 200 Lothrop St"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Priority</label>
+                <select
+                  value={reqPriority}
+                  onChange={(e) => setReqPriority(e.target.value as any)}
+                  className="field-input"
+                >
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                  <option value="Low">Low</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Ambulances</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={reqAmbulances}
+                  onChange={(e) => setReqAmbulances(Number(e.target.value))}
+                  className="field-input"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Fire Engines</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={reqEngines}
+                  onChange={(e) => setReqEngines(Number(e.target.value))}
+                  className="field-input"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={() => handleSubmitRequest(false)}
+              disabled={reqAmbulances === 0 && reqEngines === 0}
+              className="
+                w-full py-2.5 rounded-xl font-semibold text-sm
+                bg-blue-600 hover:bg-blue-500 text-white
+                disabled:opacity-30 disabled:cursor-not-allowed
+                transition-colors
+              "
+            >
+              Submit Request
+            </button>
+          </div>
         </div>
 
-        <div
-          className={`rounded-lg border p-3 text-sm leading-relaxed ${
-            lowDispatch.low ? "border-destructive/25 bg-destructive/5" : "border-border bg-muted/30"
-          }`}
-        >
-          <p className="font-medium mb-1">
-            {lowDispatch.low ? "Action recommended" : "No action needed"}
-          </p>
-          <p className="text-muted-foreground whitespace-pre-wrap">{lowDispatch.warning}</p>
-        </div>
-      </>
-    )}
+        {/* Right panel: low dispatch status + all available */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Ambulance availability card */}
+          <div className={`
+            rounded-xl border p-4 space-y-3
+            ${lowDispatch?.low
+              ? 'border-red-500/20 bg-red-500/5'
+              : 'border-white/[0.06] bg-[#111827]'
+            }
+          `}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className={`h-4 w-4 ${lowDispatch?.low ? 'text-red-400' : 'text-slate-600'}`} />
+                <span className="text-sm font-semibold text-white">Dispatch Monitor</span>
+              </div>
+              <button
+                onClick={fetchLowDispatchAlert}
+                disabled={lowDispatchLoading}
+                className="text-slate-600 hover:text-slate-400 transition-colors"
+              >
+                <RotateCcw className={`h-3.5 w-3.5 ${lowDispatchLoading ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
 
-    {!lowDispatchLoading && !lowDispatchError && !lowDispatch && (
-      <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-        No alert data available.
-      </div>
-    )}
-  </CardContent>
-</Card>
+            {lowDispatchError && (
+              <p className="text-xs text-red-400">{lowDispatchError}</p>
+            )}
 
+            {!lowDispatch && !lowDispatchError && (
+              <p className="text-xs text-slate-600">Checking…</p>
+            )}
+
+            {lowDispatch && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${lowDispatch.low ? 'bg-red-500' : 'bg-emerald-500'}`} />
+                  <span className={`text-sm font-semibold ${lowDispatch.low ? 'text-red-300' : 'text-emerald-400'}`}>
+                    {lowDispatch.low ? 'LOW AVAILABILITY' : 'NORMAL'}
+                  </span>
+                  <span className="text-xs text-slate-600 ml-auto">30s refresh</span>
+                </div>
+                {lowDispatch.warning && (
+                  <p className="text-xs text-slate-400 leading-relaxed">{lowDispatch.warning}</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Available units breakdown */}
+          <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-white">Available Units</h3>
+            <div className="space-y-2">
+              {dbUnits.filter((u) => u.status === 'AVAILABLE').length === 0 ? (
+                <p className="text-xs text-slate-600 py-2">No units available</p>
+              ) : (
+                dbUnits
+                  .filter((u) => u.status === 'AVAILABLE')
+                  .map((u) => (
+                    <div key={u.id} className="flex items-center gap-2.5">
+                      <span className="status-dot available" />
+                      <span className="text-sm text-slate-300 flex-1">{u.name}</span>
+                      <span className="text-xs text-slate-600 bg-white/[0.04] px-2 py-0.5 rounded-md">
+                        {u.unit_type === 'AMB' ? 'AMB' : 'ENG'}
+                      </span>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
       {selectedRequest && <RequestDetailDrawer request={selectedRequest} onClose={() => setSelectedRequest(null)} />}
 
-      {/* Prediction Modal */}
+      {/* AI Prediction Modal */}
       {showPredictionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-white p-6 rounded-lg w-[520px]">
-            <h3 className="text-lg font-medium mb-4">Initial Prediction</h3>
-
-            <div className="space-y-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#111827] border border-white/[0.08] rounded-2xl w-full max-w-lg shadow-2xl">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
               <div>
-                <label className="block text-sm">City Location</label>
-                <input
-                  value={predictionInput.location}
-                  onChange={e => setPredictionInput(i => ({ ...i, location: e.target.value }))}
-                  className="w-full input"
-                />
+                <h3 className="text-base font-semibold text-white">AI Resource Prediction</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Enter incident details to get a resource estimate</p>
               </div>
+              <button
+                onClick={() => { setShowPredictionModal(false); setPredicted(null); setPredictionError(null); }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
 
-              <div>
-                <label className="block text-sm">Buildings Affected</label>
-                <input
-                  type="number"
-                  value={predictionInput.buildings}
-                  onChange={e => setPredictionInput(i => ({ ...i, buildings: Number(e.target.value) }))}
-                  className="w-full input"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm">Approx. Affected Population</label>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">City / Location</label>
                   <input
-                    type="number"
-                    value={predictionInput.patientCount}
-                    onChange={e => setPredictionInput(i => ({ ...i, patientCount: Number(e.target.value) }))}
-                    className="w-full input"
+                    value={predictionInput.location}
+                    onChange={(e) => setPredictionInput((i) => ({ ...i, location: e.target.value }))}
+                    className="field-input"
+                    placeholder="e.g., Pittsburgh, PA"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm">Disaster Type</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Disaster Type</label>
                   <select
                     value={predictionInput.disasterType}
-                    onChange={e => {
+                    onChange={(e) => {
                       const newType = e.target.value;
                       const options = PREDICTION_SUBCATEGORIES[newType] ?? ['General'];
-                      setPredictionInput(i => ({
-                        ...i,
-                        disasterType: newType,
-                        subCategory: options[0],
-                      }));
+                      setPredictionInput((i) => ({ ...i, disasterType: newType, subCategory: options[0] }));
                     }}
-                    className="w-full input"
+                    className="field-input"
                   >
-                    <option value="Fire">Fire</option>
-                    <option value="Weather">Weather</option>
-                    <option value="Infrastructure">Infrastructure</option>
-                    <option value="Public Health">Public Health</option>
+                    {Object.keys(PREDICTION_SUBCATEGORIES).map((k) => <option key={k}>{k}</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm">Subcategory</label>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Subcategory</label>
                   <select
                     value={predictionInput.subCategory}
-                    onChange={e => setPredictionInput(i => ({ ...i, subCategory: e.target.value }))}
-                    className="w-full input"
+                    onChange={(e) => setPredictionInput((i) => ({ ...i, subCategory: e.target.value }))}
+                    className="field-input"
                   >
-                    {(PREDICTION_SUBCATEGORIES[predictionInput.disasterType] ?? ['General']).map(sub => (
-                      <option key={sub} value={sub}>
-                        {sub}
-                      </option>
+                    {(PREDICTION_SUBCATEGORIES[predictionInput.disasterType] ?? ['General']).map((sub) => (
+                      <option key={sub}>{sub}</option>
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Buildings Affected</label>
+                  <input
+                    type="number"
+                    value={predictionInput.buildings}
+                    onChange={(e) => setPredictionInput((i) => ({ ...i, buildings: Number(e.target.value) }))}
+                    className="field-input"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wide">Affected Population</label>
+                  <input
+                    type="number"
+                    value={predictionInput.patientCount}
+                    onChange={(e) => setPredictionInput((i) => ({ ...i, patientCount: Number(e.target.value) }))}
+                    className="field-input"
+                  />
+                </div>
               </div>
 
-              {predictionError && <p className="text-sm text-red-600">{predictionError}</p>}
-            </div>
+              {predictionError && (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                  {predictionError}
+                </p>
+              )}
 
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setShowPredictionModal(false);
-                  setPredicted(null);
-                  setPredictionError(null);
-                }}
+              <button
+                onClick={runPrediction}
+                disabled={predictionLoading}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
               >
-                Cancel
-              </Button>
-              <Button onClick={runPrediction} disabled={predictionLoading}>
-                {predictionLoading ? 'Running...' : 'Run Prediction'}
-              </Button>
+                {predictionLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Running…</> : 'Run Prediction'}
+              </button>
+
+              {predicted && (
+                <div className="space-y-3 pt-2 border-t border-white/[0.06]">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Prediction Results</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-white/[0.06] bg-[#0c111b] p-3 text-center">
+                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fire Engines</p>
+                      <p className="text-3xl font-bold text-white">{predicted.engines}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/[0.06] bg-[#0c111b] p-3 text-center">
+                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Ambulances</p>
+                      <p className="text-3xl font-bold text-white">{predicted.ambulances}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={populateRequestFromPrediction}
+                    className="w-full py-2.5 rounded-xl font-semibold text-sm border border-blue-500/40 text-blue-400 hover:bg-blue-500/10 transition-colors flex items-center justify-center gap-2"
+                  >
+                    Use This Prediction <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
-
-            {predictionError && <p className="mt-3 text-sm text-destructive">{predictionError}</p>}
-
-            {predicted && (
-              <div className="mt-4 border-t pt-4">
-                <p className="text-sm text-muted-foreground mb-2">Prediction Results</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Fire Engines</p>
-                    <p className="text-2xl font-semibold">{predicted.engines}</p>
-                    <p className="text-sm text-muted-foreground">Recommended count</p>
-                  </div>
-                  <div className="rounded-lg border border-border p-3">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Ambulances</p>
-                    <p className="text-2xl font-semibold">{predicted.ambulances}</p>
-                    <p className="text-sm text-muted-foreground">Recommended count</p>
-                  </div>
-                </div>
-                <div className="flex justify-end gap-2 mt-3">
-                  <Button onClick={populateRequestFromPrediction}>
-                    Create Request from Prediction
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
     </div>
   );
 };
+
+interface StatCardProps {
+  icon?: React.ReactNode;
+  label: string;
+  value: number | string;
+  total?: number;
+  loading?: boolean;
+  critical?: boolean;
+  valueClass?: string;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ icon, label, value, total, loading, critical, valueClass }) => (
+  <div className={`
+    rounded-xl border p-4 space-y-2
+    ${critical ? 'border-red-500/20 bg-red-500/5' : 'border-white/[0.06] bg-[#111827]'}
+  `}>
+    {icon && <div className={`${critical ? 'text-red-400' : 'text-slate-500'}`}>{icon}</div>}
+    <div>
+      <p className="text-xs text-slate-500 leading-tight">{label}</p>
+      <div className="flex items-baseline gap-1.5 mt-1">
+        {loading ? (
+          <span className="h-7 w-8 rounded bg-white/[0.05] animate-pulse block" />
+        ) : (
+          <span className={`text-2xl font-bold ${valueClass ?? (critical ? 'text-red-400' : 'text-white')}`}>
+            {value}
+          </span>
+        )}
+        {total !== undefined && !loading && (
+          <span className="text-xs text-slate-600">/ {total}</span>
+        )}
+      </div>
+    </div>
+  </div>
+);

@@ -1,19 +1,25 @@
 import React, { useState } from 'react';
 import { Role, useAuth } from '@/app/contexts/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
-import { Label } from '@/app/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/app/components/ui/select';
+import { Shield, Radio } from 'lucide-react';
 
 interface LoginScreenProps {
   onLogin: () => void;
 }
+
+const roles: { value: Role; label: string; desc: string; icon: React.ReactNode }[] = [
+  {
+    value: 'IC',
+    label: 'Incident Commander',
+    desc: 'Command view — request resources, monitor units',
+    icon: <Shield className="h-5 w-5" />,
+  },
+  {
+    value: 'EMSFire',
+    label: 'EMS / Fire Personnel',
+    desc: 'Field view — dispatch units, respond to requests',
+    icon: <Radio className="h-5 w-5" />,
+  },
+];
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const { loginWithRole } = useAuth();
@@ -23,7 +29,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRole) {
-      setError('Please select a role to continue.');
+      setError('Select a role to continue.');
       return;
     }
     loginWithRole(selectedRole as Role);
@@ -31,51 +37,92 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 to-slate-800 p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-white tracking-tight">PRISM</h1>
-          <p className="text-slate-400 mt-2 text-sm">
+    <div className="min-h-screen flex items-center justify-center bg-[#0c111b] p-4">
+      {/* Subtle grid background */}
+      <div
+        className="fixed inset-0 opacity-[0.03]"
+        style={{
+          backgroundImage:
+            'linear-gradient(#3b82f6 1px, transparent 1px), linear-gradient(to right, #3b82f6 1px, transparent 1px)',
+          backgroundSize: '48px 48px',
+        }}
+      />
+
+      <div className="relative w-full max-w-sm space-y-8">
+        {/* Brand */}
+        <div className="text-center space-y-3">
+          <div className="inline-flex items-center justify-center gap-2 mb-2">
+            <span className="live-pulse h-2 w-2 rounded-full bg-emerald-400 inline-block" />
+            <span className="text-xs font-semibold tracking-[0.3em] text-slate-500 uppercase">System Active</span>
+          </div>
+          <h1 className="text-5xl font-bold tracking-tight text-white">PRISM</h1>
+          <p className="text-slate-500 text-sm leading-relaxed">
             Priority · Resource · Incident · Simulation · Monitoring
           </p>
         </div>
 
-        <Card className="border-slate-700 bg-slate-800/50 backdrop-blur">
-          <CardHeader className="text-center pb-2">
-            <CardTitle className="text-white text-lg">Demo Login</CardTitle>
-            <CardDescription className="text-slate-400">
-              Select your role to enter the system
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="role" className="text-slate-300">Role</Label>
-                <Select value={selectedRole} onValueChange={(v) => { setSelectedRole(v as Role); setError(''); }}>
-                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                    <SelectValue placeholder="Select your role..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="IC">Incident Commander (IC)</SelectItem>
-                    <SelectItem value="EMSFire">EMS / Fire Personnel</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Role selector */}
+        <form onSubmit={handleLogin} className="space-y-3">
+          <p className="text-xs font-semibold tracking-widest uppercase text-slate-600 mb-4">
+            Select your role
+          </p>
 
-              {error && <p className="text-sm text-red-400">{error}</p>}
+          {roles.map((role) => {
+            const isSelected = selectedRole === role.value;
+            return (
+              <button
+                key={role.value}
+                type="button"
+                onClick={() => { setSelectedRole(role.value); setError(''); }}
+                className={`
+                  w-full flex items-start gap-4 p-4 rounded-xl border text-left transition-all
+                  ${isSelected
+                    ? 'bg-blue-600/10 border-blue-500/50 shadow-[0_0_0_1px_rgba(59,130,246,0.3)]'
+                    : 'bg-[#111827] border-white/[0.07] hover:border-white/[0.14] hover:bg-white/[0.03]'
+                  }
+                `}
+              >
+                <span className={`mt-0.5 ${isSelected ? 'text-blue-400' : 'text-slate-600'}`}>
+                  {role.icon}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold ${isSelected ? 'text-white' : 'text-slate-300'}`}>
+                    {role.label}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{role.desc}</p>
+                </div>
+                <span
+                  className={`
+                    mt-0.5 h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                    ${isSelected ? 'border-blue-500 bg-blue-500' : 'border-slate-600'}
+                  `}
+                >
+                  {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                </span>
+              </button>
+            );
+          })}
 
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">
-                Enter PRISM
-              </Button>
-            </form>
+          {error && (
+            <p className="text-sm text-red-400 px-1">{error}</p>
+          )}
 
-            <div className="mt-4 pt-4 border-t border-slate-700">
-              <p className="text-xs text-slate-500 text-center">
-                IC — full command view &nbsp;·&nbsp; EMS/Fire — field dispatch view
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          <button
+            type="submit"
+            className="
+              w-full mt-2 py-3 px-4 rounded-xl font-semibold text-sm
+              bg-blue-600 hover:bg-blue-500 text-white
+              transition-colors disabled:opacity-40 disabled:cursor-not-allowed
+              shadow-[0_1px_2px_rgba(0,0,0,0.5)]
+            "
+          >
+            Enter PRISM
+          </button>
+        </form>
+
+        <p className="text-center text-xs text-slate-700">
+          Emergency Resource Command System · Demo
+        </p>
       </div>
     </div>
   );

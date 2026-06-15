@@ -1,15 +1,8 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card';
-import { Button } from '@/app/components/ui/button';
-import { Badge } from '@/app/components/ui/badge';
 import { format } from 'date-fns';
+import { X, Loader2 } from 'lucide-react';
 
-// unused import removed
-
-// --------------------
-// API config + helpers
-// --------------------
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000/api';
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -24,17 +17,14 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-// --------------------
-// Types matching YOUR Django models
-// --------------------
 type UnitTypeCode = 'AMB' | 'ENG';
 type UnitStatusCode = 'AVAILABLE' | 'ENROUTE' | 'ON_SCENE' | 'TRANSPORTING';
 
 type ApiUnit = {
-  id: number; // Django PK
-  name: string; // "Ambulance 3"
-  unit_type: UnitTypeCode; // "AMB"
-  status: UnitStatusCode; // "AVAILABLE"
+  id: number;
+  name: string;
+  unit_type: UnitTypeCode;
+  status: UnitStatusCode;
   last_status_at: string;
   updated_at: string;
 };
@@ -42,8 +32,8 @@ type ApiUnit = {
 type ApiResourceRequestStatus = 'PENDING' | 'APPROVED' | 'DENIED' | 'PARTIAL' | 'COMPLETED';
 
 type ApiResourceRequest = {
-  id: number; // Django PK
-  unit_type: UnitTypeCode; // "AMB" or "ENG"
+  id: number;
+  unit_type: UnitTypeCode;
   quantity: number;
   priority: string;
   location: string;
@@ -52,10 +42,9 @@ type ApiResourceRequest = {
   updated_at: string;
 };
 
-// For dispatch modal
 const STATUS_LABEL: Record<UnitStatusCode, string> = {
   AVAILABLE: 'Available',
-  ENROUTE: 'Enroute',
+  ENROUTE: 'En Route',
   ON_SCENE: 'On Scene',
   TRANSPORTING: 'Transporting',
 };
@@ -65,15 +54,36 @@ const UNIT_LABEL: Record<UnitTypeCode, string> = {
   ENG: 'Engine',
 };
 
-// --------------------
+function statusDotClass(s: UnitStatusCode) {
+  if (s === 'AVAILABLE') return 'available';
+  if (s === 'ENROUTE') return 'enroute';
+  if (s === 'ON_SCENE') return 'on-scene';
+  return 'transporting';
+}
+
+function statusTextClass(s: UnitStatusCode) {
+  if (s === 'AVAILABLE') return 'text-emerald-400';
+  if (s === 'ENROUTE') return 'text-amber-400';
+  if (s === 'ON_SCENE') return 'text-orange-400';
+  return 'text-blue-400';
+}
+
+function priorityBorder(priority: string) {
+  if (priority === 'High') return 'border-red-500/40';
+  if (priority === 'Medium') return 'border-amber-500/30';
+  return 'border-white/[0.06]';
+}
+
+function priorityDot(priority: string) {
+  if (priority === 'High') return 'bg-red-500';
+  if (priority === 'Medium') return 'bg-amber-400';
+  return 'bg-slate-500';
+}
 
 export const FieldHomeScreen: React.FC = () => {
   const { user } = useAuth();
-
-  // EMS STATION VIEW (renders only for EMSFire role)
   const isEMS = user?.role === 'EMSFire';
 
-  // ---- server-backed state (EMS only)
   const [units, setUnits] = useState<ApiUnit[]>([]);
   const [requests, setRequests] = useState<ApiResourceRequest[]>([]);
   const [loading, setLoading] = useState(false);
@@ -99,8 +109,6 @@ export const FieldHomeScreen: React.FC = () => {
   useEffect(() => {
     if (!isEMS) return;
     refresh();
-
-    // MVP “live sync”: poll so the other client’s updates show up
     const t = setInterval(() => refresh().catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [isEMS, refresh]);
@@ -108,25 +116,17 @@ export const FieldHomeScreen: React.FC = () => {
   const allUnits = useMemo(() => units || [], [units]);
 
   const unitCounts = useMemo(() => {
-    const counts = {
-      Available: 0,
-      Enroute: 0,
-      'On Scene': 0,
-      Transporting: 0,
-    };
-
+    const c = { Available: 0, Enroute: 0, 'On Scene': 0, Transporting: 0 };
     allUnits.forEach((u) => {
-      const label = STATUS_LABEL[u.status];
-      if (label === 'Available') counts.Available += 1;
-      if (label === 'Enroute') counts.Enroute += 1;
-      if (label === 'On Scene') counts['On Scene'] += 1;
-      if (label === 'Transporting') counts.Transporting += 1;
+      if (u.status === 'AVAILABLE') c.Available++;
+      if (u.status === 'ENROUTE') c.Enroute++;
+      if (u.status === 'ON_SCENE') c['On Scene']++;
+      if (u.status === 'TRANSPORTING') c.Transporting++;
     });
-
-    return counts;
+    return c;
   }, [allUnits]);
 
-  // ---- Respond modal state
+  // Respond modal
   const [respondOpen, setRespondOpen] = useState(false);
   const [activeRequest, setActiveRequest] = useState<ApiResourceRequest | null>(null);
   const [selectedUnitIds, setSelectedUnitIds] = useState<number[]>([]);
@@ -152,36 +152,24 @@ export const FieldHomeScreen: React.FC = () => {
     setSelectedUnitIds((prev) => (prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]));
   };
 
-  // ✅ IMPORTANT: available units should depend on ACTIVE REQUEST TYPE
   const availableUnitsForActiveRequest = useMemo(() => {
     if (!activeRequest) return [];
     return allUnits.filter((u) => u.status === 'AVAILABLE' && u.unit_type === activeRequest.unit_type);
   }, [allUnits, activeRequest]);
 
   const dispatchRequest = async () => {
-    if (!activeRequest) return;
-    if (selectedUnitIds.length === 0) return;
-
+    if (!activeRequest || selectedUnitIds.length === 0) return;
     setDispatching(true);
     setErr(null);
-
-    // ✅ optimistic update: immediately show ENROUTE for selected units
-    setUnits((prev) =>
-      prev.map((u) => (selectedUnitIds.includes(u.id) ? { ...u, status: 'ENROUTE' } : u))
-    );
-
+    setUnits((prev) => prev.map((u) => (selectedUnitIds.includes(u.id) ? { ...u, status: 'ENROUTE' as UnitStatusCode } : u)));
     try {
       await api(`/requests/${activeRequest.id}/dispatch/`, {
         method: 'POST',
         body: JSON.stringify({ unit_ids: selectedUnitIds, note }),
       });
-
       closeRespond();
-
-      // ✅ reconcile with server (in case backend also updated request status, etc.)
       await refresh();
     } catch (e: any) {
-      // rollback optimistic update if dispatch failed
       await refresh();
       setErr(e?.message ?? 'Dispatch failed');
     } finally {
@@ -205,219 +193,275 @@ export const FieldHomeScreen: React.FC = () => {
     }
   };
 
-  // =========================
-  // EMS UI (server-backed)
-  // =========================
-  if (isEMS) {
-    return (
-      <div className="p-6 space-y-6">
-        <div className="mb-2">
-          <h1 className="text-2xl font-semibold mb-1">EMS Station</h1>
-          <p className="text-muted-foreground">Monitor unit readiness and respond to IC dispatch requests</p>
-          {loading && <p className="text-sm text-muted-foreground mt-2"></p>}
-          {err && <p className="text-sm text-red-600 mt-2">{err}</p>}
+  if (!isEMS) return null;
+
+  return (
+    <div className="p-6 space-y-6 max-w-6xl">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-white">Field Station</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Unit readiness and IC dispatch requests</p>
         </div>
-
-        {/* Top summary counts */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {Object.entries(unitCounts).map(([label, count]) => (
-            <Card key={label}>
-              <CardContent className="p-4">
-                <div className="text-sm text-muted-foreground">{label}</div>
-                <div className="text-2xl font-semibold">{count}</div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="flex items-center gap-2 text-xs text-slate-600">
+          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          <span>5s refresh</span>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Units table */}
-          <div className="lg:col-span-2 space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>All Units</CardTitle>
-                <Badge variant="outline">{allUnits.length} Units</Badge>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {allUnits.map((u) => (
-                    <div key={u.id} className="flex items-center justify-between border rounded-lg p-3">
-                      <div className="flex items-center gap-3">
-                        <div className="font-medium">{u.name}</div>
-                        <Badge variant="secondary" className="text-xs">
-                          #{u.id}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {UNIT_LABEL[u.unit_type]}
-                        </Badge>
-                      </div>
+      {err && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 text-sm text-red-400">
+          {err}
+        </div>
+      )}
 
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline" className="text-xs">
-                          {STATUS_LABEL[u.status]}
-                        </Badge>
-                        {u.status === 'TRANSPORTING' && (
-                          <Button
-                            size="xs"
-                            variant="secondary"
-                            onClick={() => markUnitAvailable(u.id)}
-                            disabled={unitStatusUpdating === u.id || dispatching}
-                          >
-                            {unitStatusUpdating === u.id ? 'Updating...' : 'Mark Available'}
-                          </Button>
-                        )}
-                      </div>
+      {/* Status counts */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Available', count: unitCounts.Available, dotClass: 'available', textClass: 'text-emerald-400' },
+          { label: 'En Route', count: unitCounts.Enroute, dotClass: 'enroute', textClass: 'text-amber-400' },
+          { label: 'On Scene', count: unitCounts['On Scene'], dotClass: 'on-scene', textClass: 'text-orange-400' },
+          { label: 'Transporting', count: unitCounts.Transporting, dotClass: 'transporting', textClass: 'text-blue-400' },
+        ].map(({ label, count, dotClass, textClass }) => (
+          <div key={label} className="rounded-xl border border-white/[0.06] bg-[#111827] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`status-dot ${dotClass}`} />
+              <span className="text-xs text-slate-500">{label}</span>
+            </div>
+            <p className={`text-3xl font-bold ${textClass}`}>{count}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        {/* All units */}
+        <div className="lg:col-span-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-white uppercase tracking-widest">All Units</h2>
+            <span className="text-xs text-slate-600">{allUnits.length} total</span>
+          </div>
+          <div className="rounded-xl border border-white/[0.06] bg-[#111827] overflow-hidden">
+            {allUnits.length === 0 ? (
+              <div className="p-8 text-center text-slate-600 text-sm">
+                {loading ? 'Loading units…' : 'No units found'}
+              </div>
+            ) : (
+              <div className="divide-y divide-white/[0.04]">
+                {allUnits.map((u) => (
+                  <div key={u.id} className="flex items-center gap-3 px-4 py-3">
+                    <span className={`status-dot ${statusDotClass(u.status)}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white">{u.name}</p>
+                      <p className={`text-xs ${statusTextClass(u.status)}`}>
+                        {STATUS_LABEL[u.status]}
+                      </p>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Incoming IC Requests */}
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Incoming IC Requests</CardTitle>
-                {requests.length > 0 && <Badge variant="destructive">{requests.length} New</Badge>}
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                {requests.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No incoming requests.</p>
-                ) : (
-                  requests.map((req) => {
-                    const unitLabel = UNIT_LABEL[req.unit_type];
-
-                    const availableForReq = allUnits.filter(
-                      (u) => u.status === 'AVAILABLE' && u.unit_type === req.unit_type
-                    );
-
-                    const noneAvailable = availableForReq.length === 0;
-
-                    return (
-                      <div key={req.id} className="p-3 border rounded-lg hover:bg-accent transition-colors">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <div className="font-medium text-sm">REQ #{req.id}</div>
-                              <Badge variant="outline" className="text-xs">
-                                {req.priority || 'Medium'}
-                              </Badge>
-                            </div>
-
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Needed: {req.quantity} {unitLabel}(s) • {req.location || '—'}
-                            </div>
-
-                            <div className="text-xs text-muted-foreground">
-                              Created: {format(new Date(req.created_at), 'MMM d, h:mm a')}
-                            </div>
-                          </div>
-
-                          <Button size="sm" onClick={() => openRespond(req)} disabled={noneAvailable}>
-                            Respond
-                          </Button>
-                        </div>
-
-                        {noneAvailable && (
-                          <p className="text-xs text-muted-foreground mt-2">
-                            No available {unitLabel.toLowerCase()}s to dispatch.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
+                    <span className="text-xs text-slate-600 bg-white/[0.04] px-2 py-0.5 rounded-md shrink-0">
+                      {UNIT_LABEL[u.unit_type]}
+                    </span>
+                    {u.status === 'TRANSPORTING' && (
+                      <button
+                        onClick={() => markUnitAvailable(u.id)}
+                        disabled={unitStatusUpdating === u.id || dispatching}
+                        className="text-xs px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-slate-400 hover:text-white transition-colors disabled:opacity-40"
+                      >
+                        {unitStatusUpdating === u.id ? '…' : 'Mark Available'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Respond Modal */}
-        {respondOpen && activeRequest && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-lg w-full max-w-lg p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <div className="text-lg font-semibold">Respond to REQ #{activeRequest.id}</div>
-                  <div className="text-sm text-muted-foreground">
-                    Select available {UNIT_LABEL[activeRequest.unit_type].toLowerCase()}s to dispatch
+        {/* Incoming requests */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-white uppercase tracking-widest">Incoming Requests</h2>
+            {requests.length > 0 && (
+              <span className="text-xs font-semibold text-red-300 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">
+                {requests.length} pending
+              </span>
+            )}
+          </div>
+
+          {requests.length === 0 ? (
+            <div className="rounded-xl border border-white/[0.06] bg-[#111827] p-8 text-center">
+              <p className="text-sm text-slate-600">No incoming requests</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {requests.map((req) => {
+                const availableForReq = allUnits.filter((u) => u.status === 'AVAILABLE' && u.unit_type === req.unit_type);
+                const noneAvailable = availableForReq.length === 0;
+
+                return (
+                  <div
+                    key={req.id}
+                    className={`rounded-xl border p-4 space-y-3 bg-[#111827] ${priorityBorder(req.priority)}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${priorityDot(req.priority)}`} />
+                          <span className="text-sm font-semibold text-white">REQ #{req.id}</span>
+                          <span className="text-xs text-slate-500">{req.priority} priority</span>
+                        </div>
+                        <p className="text-sm text-slate-300">
+                          {req.quantity}× {UNIT_LABEL[req.unit_type]}
+                          {req.location && <span className="text-slate-500"> · {req.location}</span>}
+                        </p>
+                        <p className="text-xs text-slate-600 mt-1">
+                          {format(new Date(req.created_at), 'h:mm a')}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => openRespond(req)}
+                        disabled={noneAvailable}
+                        className="
+                          text-xs px-3 py-2 rounded-lg font-semibold shrink-0
+                          bg-blue-600 hover:bg-blue-500 text-white
+                          disabled:opacity-30 disabled:cursor-not-allowed
+                          transition-colors
+                        "
+                      >
+                        Respond
+                      </button>
+                    </div>
+
+                    {noneAvailable && (
+                      <p className="text-xs text-slate-600">
+                        No available {UNIT_LABEL[req.unit_type].toLowerCase()}s to dispatch.
+                      </p>
+                    )}
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dispatch Modal */}
+      {respondOpen && activeRequest && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-[#111827] border border-white/[0.08] rounded-2xl w-full max-w-lg shadow-2xl">
+            {/* Header */}
+            <div className="flex items-start justify-between px-5 py-4 border-b border-white/[0.06]">
+              <div>
+                <p className="text-base font-semibold text-white">Respond to REQ #{activeRequest.id}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Select {UNIT_LABEL[activeRequest.unit_type].toLowerCase()}s to dispatch
+                </p>
+              </div>
+              <button
+                onClick={closeRespond}
+                disabled={dispatching}
+                className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Request info */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-white/[0.04] px-3 py-2.5">
+                  <p className="text-xs text-slate-500 mb-0.5">Priority</p>
+                  <p className="text-sm font-semibold text-white">{activeRequest.priority || 'Medium'}</p>
                 </div>
-                <Button variant="ghost" onClick={closeRespond} disabled={dispatching}>
-                  Close
-                </Button>
+                <div className="rounded-lg bg-white/[0.04] px-3 py-2.5">
+                  <p className="text-xs text-slate-500 mb-0.5">Location</p>
+                  <p className="text-sm font-semibold text-white truncate">{activeRequest.location || '—'}</p>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Priority:</span>{' '}
-                  <b>{activeRequest.priority || 'Medium'}</b>
-                </div>
-
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Location:</span>{' '}
-                  <b>{activeRequest.location || '—'}</b>
-                </div>
-
-                <div className="border rounded-lg p-3 max-h-56 overflow-auto space-y-2">
+              {/* Unit picker */}
+              <div>
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                  Available {UNIT_LABEL[activeRequest.unit_type]}s
+                </p>
+                <div className="rounded-xl border border-white/[0.06] bg-[#0c111b] max-h-52 overflow-y-auto divide-y divide-white/[0.04]">
                   {availableUnitsForActiveRequest.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No available units for this request.</p>
+                    <p className="text-sm text-slate-600 p-4">No available units for this request type.</p>
                   ) : (
-                    availableUnitsForActiveRequest.map((u) => (
-                      <label key={u.id} className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
+                    availableUnitsForActiveRequest.map((u) => {
+                      const checked = selectedUnitIds.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${
+                            checked ? 'bg-blue-600/10' : 'hover:bg-white/[0.03]'
+                          }`}
+                        >
+                          <span
+                            className={`h-4 w-4 rounded border-2 shrink-0 flex items-center justify-center transition-colors ${
+                              checked ? 'border-blue-500 bg-blue-600' : 'border-slate-600'
+                            }`}
+                          >
+                            {checked && (
+                              <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 12 12">
+                                <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </span>
                           <input
                             type="checkbox"
-                            checked={selectedUnitIds.includes(u.id)}
+                            className="sr-only"
+                            checked={checked}
                             onChange={() => toggleSelected(u.id)}
                             disabled={dispatching}
                           />
-                          <span className="text-sm">{u.name}</span>
-                          <Badge variant="secondary" className="text-xs">
-                            #{u.id}
-                          </Badge>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          {STATUS_LABEL[u.status]}
-                        </Badge>
-                      </label>
-                    ))
+                          <span className="text-sm text-white flex-1">{u.name}</span>
+                          <span className="status-dot available" />
+                        </label>
+                      );
+                    })
                   )}
                 </div>
+              </div>
 
-                <div>
-                  <div className="text-sm font-medium mb-1">Note (optional)</div>
-                  <textarea
-                    className="w-full border rounded-lg p-2 text-sm"
-                    rows={3}
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="e.g., 2 units dispatched now, 1 delayed 10 min"
-                    disabled={dispatching}
-                  />
-                </div>
+              {/* Note */}
+              <div>
+                <label className="block text-xs font-medium text-slate-500 uppercase tracking-wide mb-1.5">
+                  Note (optional)
+                </label>
+                <textarea
+                  className="field-input resize-none"
+                  rows={2}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="e.g., 2 units now, 1 delayed 10 min"
+                  disabled={dispatching}
+                />
+              </div>
 
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={closeRespond} disabled={dispatching}>
-                    Cancel
-                  </Button>
-                  <Button onClick={dispatchRequest} disabled={dispatching || selectedUnitIds.length === 0}>
-                    {dispatching ? 'Dispatching...' : `Dispatch ${selectedUnitIds.length} Unit(s)`}
-                  </Button>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Dispatch should set selected units to <b>ENROUTE</b>.
-                </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={closeRespond}
+                  disabled={dispatching}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold border border-white/[0.08] text-slate-400 hover:text-white hover:border-white/[0.18] transition-colors disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={dispatchRequest}
+                  disabled={dispatching || selectedUnitIds.length === 0}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  {dispatching ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Dispatching…</>
+                  ) : (
+                    `Dispatch ${selectedUnitIds.length > 0 ? selectedUnitIds.length + ' Unit' + (selectedUnitIds.length !== 1 ? 's' : '') : ''}`
+                  )}
+                </button>
               </div>
             </div>
           </div>
-        )}
-      </div>
-    );
-  }
-
-  return null;
+        </div>
+      )}
+    </div>
+  );
 };

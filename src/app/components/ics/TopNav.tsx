@@ -1,62 +1,54 @@
 import React from 'react';
-import { Bell, Search, LogOut, RotateCcw } from 'lucide-react';
+import { LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '@/app/contexts/AuthContext';
-import { Badge } from '@/app/components/ui/badge';
 import { Button } from '@/app/components/ui/button';
-import { Input } from '@/app/components/ui/input';
 
 export const TopNav: React.FC = () => {
   const { user, incident, logout, clearIncident } = useAuth();
 
+  const roleLabel = user?.role === 'IC' ? 'Incident Commander' : 'EMS / Fire';
+
   return (
-    <div className="h-16 border-b bg-white flex items-center justify-between px-6">
-      {/* Left Section */}
-      <div className="flex items-center gap-6">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">PRISM</h1>
-          {incident && (
-            <p className="text-sm text-muted-foreground">
-              {incident.name} • {incident.status}
-            </p>
-          )}
+    <div className="h-14 border-b border-white/[0.06] bg-[#0c111b] flex items-center justify-between px-5 shrink-0 z-20">
+      {/* Left */}
+      <div className="flex items-center gap-5">
+        <div className="flex items-center gap-2.5">
+          {/* Live pulse dot */}
+          <span className="live-pulse inline-block h-2 w-2 rounded-full bg-emerald-400" />
+          <span className="text-sm font-semibold tracking-widest text-white/90 uppercase">PRISM</span>
         </div>
 
-        {/* Change Incident Button */}
         {incident && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-4"
-            onClick={clearIncident}
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Change Incident
-          </Button>
+          <>
+            <div className="h-4 w-px bg-white/10" />
+            <button
+              onClick={clearIncident}
+              className="flex items-center gap-1.5 text-sm text-slate-300 hover:text-white transition-colors group"
+            >
+              <span className="font-medium">{incident.name}</span>
+              <span className="text-white/30">·</span>
+              <span className="text-xs text-slate-500 group-hover:text-slate-400 transition-colors uppercase tracking-wide">
+                {incident.status}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-white/30 group-hover:text-white/60 transition-colors" />
+            </button>
+          </>
         )}
       </div>
 
-      {/* Right Section */}
+      {/* Right */}
       <div className="flex items-center gap-4">
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Search..." className="pl-10 w-64" />
-        </div>
-
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1 right-1 h-2 w-2 bg-red-500 rounded-full" />
-        </Button>
-
-        <div className="flex items-center gap-3 pl-4 border-l">
+        <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-sm font-medium">{user?.name}</p>
-            <Badge variant="secondary" className="text-xs">
-              {user?.role}
-            </Badge>
+            <p className="text-sm font-medium text-white/90 leading-none mb-0.5">{user?.name}</p>
+            <p className="text-xs text-slate-500 leading-none">{roleLabel}</p>
           </div>
-          <Button variant="ghost" size="icon" onClick={logout}>
+          <button
+            onClick={logout}
+            className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-white/[0.06] text-slate-500 hover:text-slate-300 transition-colors"
+          >
             <LogOut className="h-4 w-4" />
-          </Button>
+          </button>
         </div>
       </div>
     </div>
