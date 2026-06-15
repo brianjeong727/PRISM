@@ -4,7 +4,7 @@ import { useAuth } from '@/app/contexts/AuthContext';
 import { AlertTriangle, RotateCcw, Ambulance, Flame, X, ChevronRight, Loader2 } from 'lucide-react';
 import { RequestDetailDrawer } from './RequestDetailDrawer';
 
-const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000/api').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_BASE ?? '/api').replace(/\/$/, '');
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -158,7 +158,7 @@ export const ICDashboard: React.FC = () => {
     setPredictionLoading(true);
     setPredictionError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/initial-prediction/`, {
+      const response = await fetch(`${API_BASE}/initial-prediction/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
