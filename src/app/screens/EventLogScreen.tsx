@@ -88,7 +88,7 @@ export const EventLogScreen: React.FC = () => {
     refresh({ silent: false });
 
     // ✅ light polling so the log updates when EMS/IC changes statuses
-    const t = setInterval(() => refresh({ silent: true }).catch(() => {}), 1500);
+    const t = setInterval(() => refresh({ silent: true }).catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [refresh]);
 

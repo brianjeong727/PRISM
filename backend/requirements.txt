@@ -1,3 +1,5 @@
+gunicorn==21.2.0
+whitenoise==6.7.0
 annotated-types==0.7.0
 anyio==4.12.0
 asgiref==3.11.0
@@ -24,7 +26,7 @@ importlib_metadata==8.7.1
 invoke==2.2.1
 jiter==0.12.0
 lxml==6.0.2
-mistralai==1.10.1
+anthropic>=0.40.0
 multidict==6.7.0
 numpy==2.0.2
 openai==2.9.0
@@ -49,7 +51,6 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.2.1
 pytz==2025.2
 PyYAML==6.0.3
-RateMyProfessor-Database-APIs==1.1.1
 realtime==2.25.0
 requests==2.32.5
 six==1.17.0

@@ -5,8 +5,7 @@ import { Button } from '@/app/components/ui/button';
 import { Badge } from '@/app/components/ui/badge';
 import { format } from 'date-fns';
 
-// keep your existing types for non-EMS view if you want
-import { Request as OldRequest, Bulletin } from '@/app/contexts/DataContext';
+// unused import removed
 
 // --------------------
 // API config + helpers
@@ -68,19 +67,7 @@ const UNIT_LABEL: Record<UnitTypeCode, string> = {
 
 // --------------------
 
-interface FieldHomeScreenProps {
-  onNavigateToCreateRequest: () => void;
-  onNavigateToBulletins: () => void;
-  onViewRequest: (request: OldRequest) => void;
-  onViewBulletin: (bulletin: Bulletin) => void;
-}
-
-export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
-  onNavigateToCreateRequest,
-  onNavigateToBulletins,
-  onViewRequest,
-  onViewBulletin,
-}) => {
+export const FieldHomeScreen: React.FC = () => {
   const { user } = useAuth();
 
   // EMS STATION VIEW (renders only for EMSFire role)
@@ -114,7 +101,7 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     refresh();
 
     // MVP “live sync”: poll so the other client’s updates show up
-    const t = setInterval(() => refresh().catch(() => {}), 1500);
+    const t = setInterval(() => refresh().catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [isEMS, refresh]);
 
@@ -432,5 +419,5 @@ export const FieldHomeScreen: React.FC<FieldHomeScreenProps> = ({
     );
   }
 
-  return <div className="p-6">Non-EMS view (unchanged for MVP)</div>;
+  return null;
 };

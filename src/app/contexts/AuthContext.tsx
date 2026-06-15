@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 export type Role = 'IC' | 'EMSFire';
 
@@ -21,12 +21,9 @@ export interface Incident {
 interface AuthContextType {
   user: User | null;
   incident: Incident | null;
-  login: (email: string, password: string) => Promise<void>;
   loginWithRole: (role: Role) => void;
   logout: () => void;
   selectIncident: (incident: Incident) => void;
-
-  // ✅ ADD THIS
   clearIncident: () => void;
 }
 
@@ -41,23 +38,47 @@ export const useAuth = () => {
 };
 
 const demoUsers: Record<Role, User> = {
-  IC: { id: '1', name: 'Commander Sarah Chen', email: 'ic@demo.ics', role: 'IC' },
-  EMSFire: { id: '2', name: 'EMS Station', email: 'ems@demo.ics', role: 'EMSFire' },
+  IC: { id: '1', name: 'Commander Sarah Chen', email: 'ic@prism.ops', role: 'IC' },
+  EMSFire: { id: '2', name: 'EMS Station', email: 'ems@prism.ops', role: 'EMSFire' },
 };
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [incident, setIncident] = useState<Incident | null>(null);
+const STORAGE_KEY_USER = 'prism_user';
+const STORAGE_KEY_INCIDENT = 'prism_incident';
 
-  const login = async (email: string, password: string) => {
-    // Mock login
-    const foundUser = Object.values(demoUsers).find((u) => u.email === email);
-    if (foundUser) {
-      setUser(foundUser);
-    } else {
-      throw new Error('Invalid credentials');
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<User | null>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_USER);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
     }
-  };
+  });
+
+  const [incident, setIncident] = useState<Incident | null>(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY_INCIDENT);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (user) {
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_USER);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (incident) {
+      localStorage.setItem(STORAGE_KEY_INCIDENT, JSON.stringify(incident));
+    } else {
+      localStorage.removeItem(STORAGE_KEY_INCIDENT);
+    }
+  }, [incident]);
 
   const loginWithRole = (role: Role) => {
     setUser(demoUsers[role]);
@@ -72,23 +93,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIncident(inc);
   };
 
-  // ✅ ADD THIS
   const clearIncident = () => {
     setIncident(null);
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        incident,
-        login,
-        loginWithRole,
-        logout,
-        selectIncident,
-        clearIncident, // ✅ ADD THIS
-      }}
-    >
+    <AuthContext.Provider value={{ user, incident, loginWithRole, logout, selectIncident, clearIncident }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,16 +2,12 @@ import json
 import os
 import re
 from dotenv import load_dotenv
-from mistralai import Mistral
-# Load environment variables from .env
+import anthropic
+
 load_dotenv()
 
-api_key = os.getenv("MISTRAL_API_KEY")
-if not api_key:
-    raise RuntimeError("Mistral api key not found in .env")
-model = "mistral-medium-latest"
-
-client = Mistral(api_key=api_key)
+api_key = os.getenv("ANTHROPIC_API_KEY")
+client = anthropic.Anthropic(api_key=api_key) if api_key else None
 
 SYSTEM_PROMPT = """You are an Incident Command decision-support system.
 
@@ -40,18 +36,7 @@ def estimate_resources_with_gpt(
     population_affected: int,
     temperature: float = 0.2,
 ) -> dict:
-    """
-    Uses GPT to estimate required fire engines and ambulances.
-
-    Returns:
-    {
-      "firetrucks_dispatched_engines": int,
-      "ambulances_dispatched": int
-    }
-    """
-
-    user_prompt = f"""
-Estimate required emergency resources for this incident:
+    user_prompt = f"""Estimate required emergency resources for this incident:
 
 City: {city}
 Incident category: {incident_category}
@@ -63,67 +48,45 @@ Return JSON only with this exact schema:
 {{
   "firetrucks_dispatched_engines": number,
   "ambulances_dispatched": number
-}}
-"""
-    
+}}"""
+
+    if not client:
+        return {"firetrucks_dispatched_engines": 4, "ambulances_dispatched": 10}
+
     try:
-        response = client.chat.complete(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=256,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_prompt}],
         )
-        print("RESPONSE: ", response)
-        text = response.choices[0].message.content.strip()
-
-        # Parse and return strict JSON
+        text = message.content[0].text.strip()
         cleaned = _extract_json_payload(text)
-        try:
-            data = json.loads(cleaned)
-        except json.JSONDecodeError as e:
-            raise RuntimeError(f"Model did not return valid JSON. Got:\n{text}") from e
-
-        # Optional: enforce integer outputs
-        data["firetrucks_dispatched_engines"] = int(data.get("firetrucks_dispatched_engines", 0))
-        data["ambulances_dispatched"] = int(data.get("ambulances_dispatched", 0))
-
-        # Never negative
-        data["firetrucks_dispatched_engines"] = max(0, data["firetrucks_dispatched_engines"])
-        data["ambulances_dispatched"] = max(0, data["ambulances_dispatched"])
+        data = json.loads(cleaned)
+        data["firetrucks_dispatched_engines"] = max(0, int(data.get("firetrucks_dispatched_engines", 0)))
+        data["ambulances_dispatched"] = max(0, int(data.get("ambulances_dispatched", 0)))
+        return data
     except Exception as e:
-        print("Chat completion failed, using fallback values:", e)
-        data = {
-            "firetrucks_dispatched_engines": 4,
-            "ambulances_dispatched": 10,
-        }
-
-    return data
+        print("Prediction failed, using fallback:", e)
+        return {"firetrucks_dispatched_engines": 4, "ambulances_dispatched": 10}
 
 
 def _extract_json_payload(text: str) -> str:
-    """Extract the first JSON object inside code fences or plain text."""
-
-    # strip Markdown code fences like ```json
     fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
     if fence_match:
         return fence_match.group(1)
-
-    # fallback: pull first {...}
     brace_match = re.search(r"(\{.*\})", text, re.S)
     if brace_match:
         return brace_match.group(1)
-
     return text
 
 
-# Test runner (MUST be at top-level, not inside the function)
 if __name__ == "__main__":
     result = estimate_resources_with_gpt(
         city="Austin",
         incident_category="Fire",
         incident_subtype="Structure Fire",
-        buildings_affected=0,
-        population_affected=0,
+        buildings_affected=5,
+        population_affected=50,
     )
     print(json.dumps(result, indent=2))

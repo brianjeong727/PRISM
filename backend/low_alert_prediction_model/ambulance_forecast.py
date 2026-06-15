@@ -2,38 +2,23 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+import psycopg
 
 from incidents.models import Unit
-
 
 THRESHOLD = 2
 STATUS_AVAILABLE = "AVAILABLE"
 STATUS_ENROUTE = "ENROUTE"
 
 
-def get_supabase_db_conn():
-    """
-    Uses your existing .env variables:
-      DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
-    """
-    name = os.getenv("DB_NAME")
-    user = os.getenv("DB_USER")
-    password = os.getenv("DB_PASSWORD")
-    host = os.getenv("DB_HOST")
-    port = os.getenv("DB_PORT", "5432")
-
-    if not all([name, user, password, host, port]):
-        raise RuntimeError("Database env vars missing (DB_NAME/DB_USER/DB_PASSWORD/DB_HOST/DB_PORT).")
-
-    return psycopg2.connect(
-        dbname=name,
-        user=user,
-        password=password,
-        host=host,
-        port=int(port),
-        sslmode="require",  # Supabase requires SSL
+def get_db_conn():
+    return psycopg.connect(
+        dbname=os.getenv("DB_NAME", "postgres"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT", "5432")),
+        sslmode="require",
     )
 
 
@@ -42,11 +27,6 @@ def forecast_ambulance_low(
     window_min: int = 120,
     horizon_min: int = 180,
 ) -> Tuple[bool, str]:
-    """
-    Returns (low_ambulances: bool, warning_message: str)
-    """
-
-    # Current inventory from Django DB
     available_now = Unit.objects.filter(
         unit_type=Unit.UnitType.AMBULANCE,
         status=Unit.Status.AVAILABLE,
@@ -59,9 +39,6 @@ def forecast_ambulance_low(
 
     since = datetime.now(timezone.utc) - timedelta(minutes=window_min)
 
-    # Query Supabase Postgres directly for log entries
-    # NOTE: If your table name is actually "LogEntry" or uses different casing,
-    # update it here.
     sql = """
         SELECT COUNT(*) AS cnt
         FROM incidents_logentry
@@ -70,22 +47,23 @@ def forecast_ambulance_low(
           AND to_status = %s
     """
 
-    with get_supabase_db_conn() as conn:
-        with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            cur.execute(sql, (since, STATUS_AVAILABLE, STATUS_ENROUTE))
-            row = cur.fetchone() or {"cnt": 0}
-
-    count = int(row["cnt"])
+    try:
+        with get_db_conn() as conn:
+            with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
+                cur.execute(sql, (since, STATUS_AVAILABLE, STATUS_ENROUTE))
+                row = cur.fetchone() or {"cnt": 0}
+        count = int(row["cnt"])
+    except Exception:
+        count = 0
 
     if count == 0:
         return False, (
             f"OK: {available_now} ambulances AVAILABLE (total={total}). "
-            f"No recent consumption detected."
+            "No recent consumption detected."
         )
 
     hours = max(window_min / 60.0, 1e-6)
-    rate = count / hours  # ambulances/hour
-
+    rate = count / hours
     minutes_to_threshold = int(((available_now - THRESHOLD) / rate) * 60)
 
     if minutes_to_threshold <= horizon_min:

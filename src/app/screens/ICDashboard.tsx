@@ -10,13 +10,7 @@ import { Button } from '@/app/components/ui/button';
 import {  Bell, AlertTriangle, RotateCcw} from 'lucide-react';
 import { RequestDetailDrawer } from './RequestDetailDrawer';
 
-const _env = ((import.meta as unknown) as { env: Record<string, string | undefined> }).env;
-const PREDICTION_API_BASE = (_env.VITE_API_BASE ?? '').replace(/\/$/, '');
-
-// ✅ API base for Django endpoints
-// Your .env is: VITE_API_BASE=http://localhost:8000/api
-// So API_BASE should be http://localhost:8000/api
-const API_BASE = (_env.VITE_API_BASE ?? 'http://localhost:8000/api').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_BASE ?? 'http://localhost:8000/api').replace(/\/$/, '');
 
 async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -149,7 +143,7 @@ export const ICDashboard: React.FC = () => {
     refreshUnits({ silent: false });
 
     // polling (silent)
-    const t = setInterval(() => refreshUnits({ silent: true }).catch(() => {}), 1500);
+    const t = setInterval(() => refreshUnits({ silent: true }).catch(() => {}), 5000);
     return () => clearInterval(t);
   }, [refreshUnits]);
   
@@ -306,7 +300,7 @@ const fetchLowDispatchAlert = useCallback(async () => {
         start_time: new Date().toISOString(),
       };
 
-      const response = await fetch(`${PREDICTION_API_BASE}/api/initial-prediction/`, {
+      const response = await fetch(`${API_BASE}/api/initial-prediction/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ incident: incidentPayload }),

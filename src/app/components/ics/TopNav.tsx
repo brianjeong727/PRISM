@@ -13,7 +13,7 @@ export const TopNav: React.FC = () => {
       {/* Left Section */}
       <div className="flex items-center gap-6">
         <div>
-          <h1 className="text-xl font-semibold">ICS Resource Manager</h1>
+          <h1 className="text-xl font-semibold tracking-tight">PRISM</h1>
           {incident && (
             <p className="text-sm text-muted-foreground">
               {incident.name} • {incident.status}
