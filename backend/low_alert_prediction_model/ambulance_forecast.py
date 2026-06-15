@@ -2,24 +2,9 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
-import psycopg
-
-from incidents.models import Unit
-
 THRESHOLD = 2
 STATUS_AVAILABLE = "AVAILABLE"
 STATUS_ENROUTE = "ENROUTE"
-
-
-def get_db_conn():
-    return psycopg.connect(
-        dbname=os.getenv("DB_NAME", "postgres"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        host=os.getenv("DB_HOST"),
-        port=int(os.getenv("DB_PORT", "5432")),
-        sslmode="require",
-    )
 
 
 def forecast_ambulance_low(
@@ -27,32 +12,33 @@ def forecast_ambulance_low(
     window_min: int = 120,
     horizon_min: int = 180,
 ) -> Tuple[bool, str]:
-    available_now = Unit.objects.filter(
-        unit_type=Unit.UnitType.AMBULANCE,
-        status=Unit.Status.AVAILABLE,
-    ).count()
+    from supabase import create_client
 
-    total = Unit.objects.filter(unit_type=Unit.UnitType.AMBULANCE).count()
+    url = os.getenv("SUPABASE_URL", "https://jzwqzwkuduxrictkuxcx.supabase.co")
+    key = os.getenv("SUPABASE_KEY", "")
+    sb = create_client(url, key)
+
+    avail = sb.table("incidents_unit").select("id", count="exact").eq("unit_type", "AMB").eq("status", STATUS_AVAILABLE).execute()
+    available_now = avail.count or 0
+
+    total_res = sb.table("incidents_unit").select("id", count="exact").eq("unit_type", "AMB").execute()
+    total = total_res.count or 0
 
     if available_now <= THRESHOLD:
         return True, f"LOW NOW: Only {available_now} ambulances AVAILABLE (threshold={THRESHOLD})."
 
-    since = datetime.now(timezone.utc) - timedelta(minutes=window_min)
-
-    sql = """
-        SELECT COUNT(*) AS cnt
-        FROM incidents_logentry
-        WHERE created_at >= %s
-          AND from_status = %s
-          AND to_status = %s
-    """
+    since = (datetime.now(timezone.utc) - timedelta(minutes=window_min)).isoformat()
 
     try:
-        with get_db_conn() as conn:
-            with conn.cursor(row_factory=psycopg.rows.dict_row) as cur:
-                cur.execute(sql, (since, STATUS_AVAILABLE, STATUS_ENROUTE))
-                row = cur.fetchone() or {"cnt": 0}
-        count = int(row["cnt"])
+        log_res = (
+            sb.table("incidents_logentry")
+            .select("id", count="exact")
+            .gte("created_at", since)
+            .eq("from_status", STATUS_AVAILABLE)
+            .eq("to_status", STATUS_ENROUTE)
+            .execute()
+        )
+        count = log_res.count or 0
     except Exception:
         count = 0
 
